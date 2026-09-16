@@ -157,3 +157,29 @@ export interface PickMaterialFolderResult {
   path?: string
   title?: string
 }
+
+export interface QuizAttempt {
+  id: number
+  conversationId: string,
+  questionNumber: string,
+  question: string
+  studentAnswer: string
+  feedbackGrade: string | null
+  feedbackText: string
+  expectedAnswer: string | null
+  sourceChunkIds: string[]
+  topic: string | null
+  createdAt: string
+}
+
+export interface QuizAttemptInput {
+  conversationId: string
+  questionNumber: number
+  question: string
+  studentAnswer: string
+  feedbackGrade: string | null
+  feedbackText: string
+  expectedAnswer: string | null
+  sourceChunkIds: string[]
+  topic: string | null
+}

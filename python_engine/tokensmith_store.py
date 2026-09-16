@@ -401,12 +401,28 @@ def create_schema(conn: sqlite3.Connection) -> None:
             error TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS quiz_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id TEXT NOT NULL,
+            question_number INTEGER NOT NULL,
+            question TEXT NOT NULL,
+            student_answer TEXT NOT NULL,
+            feedback_grade TEXT,
+            feedback_text TEXT NOT NULL,
+            expected_answer TEXT,
+            source_chunk_ids TEXT NOT NULL,
+            topic TEXT,
+            created_at TEXT NOT NULL
+        );
+
         CREATE INDEX IF NOT EXISTS idx_collection_items_collection_id ON collection_items(collection_id);
         CREATE INDEX IF NOT EXISTS idx_collection_items_folder_id ON collection_items(folder_id);
         CREATE INDEX IF NOT EXISTS idx_documents_folder_id ON documents(folder_id);
         CREATE INDEX IF NOT EXISTS idx_embeddings_model ON embeddings(model);
         CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id);
         CREATE INDEX IF NOT EXISTS idx_pdf_page_thumbnails_document_id ON pdf_page_thumbnails(document_id);
+        CREATE INDEX IF NOT EXISTS idx_quiz_attempts_conversation_id on quiz_attempts(conversation_id);
+        CREATE INDEX IF NOT EXISTS idx_quiz_attempts_topic ON quiz_attempts(topic);
         """
     )
     create_fts_schema(conn)
@@ -2414,3 +2430,66 @@ def dump_index(user_data_path: str) -> Dict[str, Any]:
         chunks.append(chunk)
 
     return {"version": SCHEMA_VERSION, "documents": documents, "chunks": chunks, "updatedAt": now_iso()}
+
+def record_quiz_attempt(
+        user_data_path: str,
+        conversation_id: str,
+        question_number: int,
+        question: str,
+        student_answer: str,
+        feedback_grade: Optional[str],
+        feedback_text: str,
+        expected_answer: Optional[str],
+        source_chunks_ids: Sequence[Any],
+        topic: Optional[str],
+) -> int:
+    init_db(user_data_path)
+
+    with connect(user_data_path) as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO quiz_attempts (
+                conversation_id, question_number, question, student_answer,
+                feedback_grade, feedback_text, expected_answer, source_chunk_ids,
+                topic, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?))
+        """,
+            (
+                conversation_id,
+                question_number,
+                question,
+                student_answer,
+                feedback_grade,
+                feedback_text,
+                expected_answer,
+                source_chunks_ids,
+                topic,
+                now_iso(),
+            ),
+        )
+        conn.commit()
+        return int (cursor.lastrowid)
+
+def export_quiz_attempts(
+        user_data_path: str,
+        conversation_id: Optional[str] = None,
+) -> List[Dict[str, any]]:
+    init_db(user_data_path)
+
+    query = "SELECT * FROM quiz_attempts"
+    params: Tuple[Any, ...] = ()
+    if conversation_id:
+        query += " WHERE conversation_id = ?"
+        params = (conversation_id,)
+    query += " ORDER BY created_at ASC"
+
+    with connect(user_data_path) as conn:
+        rows = conn.execute(query, params).fetchall()
+
+    attempts: List[Dict[str, Any]] = []
+    for row in rows:
+        attempt = dict(row)
+        attempt["source_chunk_ids"] = parse_json_string_list(attempt.get("source_chunk_ids"))
+        attempts.append(attempt)
+        
+    return attempts

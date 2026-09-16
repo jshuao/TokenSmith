@@ -55,6 +55,8 @@ if _NEEDS_STORE:
             starter_source_rows,
             update_material_index_state,
             vector_search,
+            export_quiz_attempts,
+            record_quiz_attempt,
         )
     except ImportError:  # pragma: no cover - allows direct package imports in tests
         from python_engine.tokensmith_store import (
@@ -78,6 +80,8 @@ if _NEEDS_STORE:
             starter_source_rows,
             update_material_index_state,
             vector_search,
+            export_quiz_attempts,
+            record_quiz_attempt,
         )
 
 try:
@@ -3022,6 +3026,43 @@ def resolve_source_document(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     return {"source": source_document_for_source(payload["userDataPath"], source)}
 
+def quiz_record_attempt(payload: Dict[str, Any]) -> Dict[str, Any]:
+    user_data_path = payload["userDataPath"]
+    attempt_id = record_quiz_attempt(
+        user_data_path,
+        conversation_id=str(payload.get("conversationId") or ""),
+        question_number=int(payload.get("questionNumber") or 0),
+        question=str(payload.get("question") or ""),
+        student_answer=str(payload.get("studentAnswer") or ""),
+        feedback_grade=payload.get("feedbackGrade"),
+        feedback_text=str(payload.get("feedbackText") or ""),
+        expected_answer=payload.get("expectedAnswer"),
+        source_chunk_ids=[str(chunk_id) for chunk_id in (payload.get("sourceChunkIds") or [])],
+        topic=payload.get("topic"),
+    )
+    return {"id": attempt_id}
+
+def quiz_export_attempts(payload: Dict[str, Any]) -> Dict[str, Any]:
+    user_data_path = payload["user_data_path"]
+    conversation_id = payload.get("conversationId")
+    attempts = export_quiz_attempts(user_data_path, conversation_id=conversation_id)
+    mapped_attempts = [
+        {
+            "id": attempt.get("id"),
+            "conversationId": attempt.get("conversation_id"),
+            "questionNumber": attempt.get("question_number"),
+            "question": attempt.get("question"),
+            "studentAnswer": attempt.get("student_answer"),
+            "feedbackGrade": attempt.get("feedback_grade"),
+            "feedbackText": attempt.get("feedback_text"),
+            "expectedAnswer": attempt.get("expected_answer"),
+            "sourceChunkIds": attempt.get("source_chunk_ids"),
+            "topic": attempt.get("topic"),
+            "createdAt": attempt.get("created_at"),
+        }
+        for attempt in attempts
+    ]
+    return {"attempts": mapped_attempts}
 
 COMMANDS = {
     "health": health,
@@ -3035,6 +3076,8 @@ COMMANDS = {
     "set_material_enabled": set_material_enabled,
     "remove_material": remove_material,
     "resolve_source_document": resolve_source_document,
+    "quiz_record_attempt": quiz_record_attempt,
+    "quiz_export_attempt": quiz_export_attempts,
 }
 
 

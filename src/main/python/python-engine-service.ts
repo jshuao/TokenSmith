@@ -6,7 +6,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statS
 import { delimiter, dirname, join } from 'node:path'
 import { createInterface } from 'node:readline'
 import type { ChatSource, CourseMaterial, LocalModel, MaterialIndexProgress, SearchMode } from '../../shared/app-state'
-import type { CleaningPreviewResult, TokenSmithLogFile } from '../../shared/engine'
+import type { CleaningPreviewResult, QuizAttempt, QuizAttemptInput, TokenSmithLogFile } from '../../shared/engine'
 import type { CleaningProfileId, CleaningRuleId } from '../../shared/cleaning'
 
 interface PythonRequest {
@@ -22,6 +22,8 @@ interface PythonRequest {
     | 'resolve_source_document'
     | 'preview_cleaning'
     | 'preparation_report'
+    | 'quiz_record_attempt'
+    | 'quiz_export_attempts'
   payload: Record<string, unknown>
 }
 
@@ -73,6 +75,14 @@ interface ResolvedSourceDocument {
 
 interface ResolveSourceDocumentResult {
   source: ResolvedSourceDocument | null
+}
+
+interface QuizRecordAttemptResult {
+  id: number
+}
+
+interface QuizExportAttemptsResult {
+  attempts: QuizAttempt[]
 }
 
 let worker: ChildProcessWithoutNullStreams | null = null
@@ -800,4 +810,36 @@ export async function resolveSourceDocumentWithPython(source: ChatSource): Promi
   )
 
   return result.source
+}
+
+export async function recordQuizAttemptWithPython(attempt: QuizAttemptInput): Promise<number> {
+  const result = await requestPython<QuizRecordAttemptResult>(
+  'quiz_record_attempt',
+  {
+    conversationId: attempt.conversationId,
+      questionNumber: attempt.questionNumber,
+      question: attempt.question,
+      studentAnswer: attempt.studentAnswer,
+      feedbackGrade: attempt.feedbackGrade,
+      feedbackText: attempt.feedbackText,
+      expectedAnswer: attempt.expectedAnswer,
+      sourceChunkIds: attempt.sourceChunkIds,
+      topic: attempt.topic,
+      userDataPath: app.getPath('userData')
+  },
+  15_000
+  )
+  return result.id
+}
+
+export async function exportQuizAttemptsWithPython(conversationId?: string): Promise<QuizAttempt[]> {
+  const result = await requestPython<QuizExportAttemptsResult>(
+    'quiz_export_attempts',
+    {
+      conversationId,
+      userDataPath: app.getPath('userData')
+    },
+    30_000
+  )
+  return result.attempts
 }
