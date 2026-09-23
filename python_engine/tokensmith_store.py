@@ -194,6 +194,7 @@ def init_db(user_data_path: str) -> None:
         ensure_column(conn, "chunks", "page_end", "INTEGER")
         ensure_column(conn, "chunks", "chunk_size", "INTEGER")
         ensure_column(conn, "chunks", "section_header", "TEXT")
+<<<<<<< HEAD
         ensure_column(conn, "chunks", "stable_chunk_id", "TEXT")
         ensure_column(conn, "chunks", "parent_id", "TEXT")
         ensure_column(conn, "chunks", "unit_part", "INTEGER")
@@ -204,6 +205,10 @@ def init_db(user_data_path: str) -> None:
         ensure_column(conn, "chunks", "chunk_kind", "TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_stable_chunk_id ON chunks(stable_chunk_id)")
         backfill_stable_chunk_ids(conn)
+=======
+        ensure_column(conn, "topic_mastery", "alpha", "REAL NOT NULL DEFAULT 1.0")
+        ensure_column(conn, "topic_mastery", "beta", "REAL NOT NULL DEFAULT 1.0")
+>>>>>>> d02df9f (Added feature to track student's mastery on topics)
         set_schema_value(conn, "version", str(SCHEMA_VERSION))
 
 
@@ -413,6 +418,14 @@ def create_schema(conn: sqlite3.Connection) -> None:
             source_chunk_ids TEXT NOT NULL,
             topic TEXT,
             created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS topic_mastery (
+            topic TEXT PRIMARY KEY,
+            alpha REAL NOT NULL DEFAULT 1.0,
+            beta REAL NOT NULL DEFAULT 1.0,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL
         );
 
         CREATE INDEX IF NOT EXISTS idx_collection_items_collection_id ON collection_items(collection_id);
@@ -2493,3 +2506,74 @@ def export_quiz_attempts(
         attempts.append(attempt)
         
     return attempts
+
+GRADE_WEIGHTS = {"good": (1.0, 0.0), "partial": (0.5, 0.5), "needs work": (0.0, 1.0)}
+
+def grade_to_weights(grade: Optional[str]) -> Optional[Tuple[float, float]]:
+    if not grade:
+        return None
+    return GRADE_WEIGHTS.get(grade.strip().lower())
+
+def _mastery_entry(topic: str, alpha: float, beta: float, attempts: int, updated_at: str) -> Dict[str, Any]:
+    return {
+        "topic": topic,
+        "mastery": alpha / (alpha + beta),
+        "confidence": attempts,
+        "alpha": alpha,
+        "beta": beta,
+        "attempts": attempts,
+        "updatedAt": updated_at,
+    }
+
+def update_topic_mastery(user_data_path: str, topic: str, grade: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not topic:
+        return None
+
+    weights = grade_to_weights(grade)
+    if weights is None:
+        return None
+
+    good_weight, bad_weight = weights
+
+    init_db(user_data_path)
+    now = now_iso()
+
+    with connect(user_data_path) as conn:
+        existing = conn.execute(
+            "SELECT alpha, beta, attempts FROM topic_mastery WHERE topic = ?", (topic,)
+            ).fetchone()
+
+        if existing is None:
+            new_alpha = 1.0 + good_weight
+            new_beta = 1.0 + bad_weight
+            new_attempts = 1
+            conn.execute(
+                "INSERT INTO topic_mastery (topic, alpha, beta, attempts, updated_at) VALUES (?, ?, ?, ?, ?)",
+                (topic, new_alpha, new_beta, new_attempts, now)
+            )
+        else:
+            new_alpha = float(existing["alpha"]) + good_weight
+            new_beta = float(existing["beta"]) + bad_weight
+            new_attempts = int(existing["attempts"]) + 1
+            conn.execute(
+                "UPDATE topic_mastery SET alpha = ?, beta = ?, attempts = ?, updated_at = ? WHERE topic = ?",
+                (new_alpha, new_beta, new_attempts, now),
+            )
+
+        conn.commit()
+
+    return _mastery_entry(topic, new_alpha, new_beta, new_attempts, now)
+
+def list_topic_mastery(user_data_path: str) -> List[Dict[str, Any]]:
+    init_db(user_data_path)
+
+    with connect(user_data_path) as conn:
+        rows = conn.execute("SELECT topic, alpha, beta, attempts, updated_at FROM topic_mastery").fetchall()
+
+    entries = [
+        _mastery_entry(row["topic"], float(row["alpha"], float(row["beta"]), int(row["attempts"]), row["updated_at"]))
+        for row in rows
+    ]
+
+    entries.sort(key=lambda entry: entry["mastery"])
+    return entries

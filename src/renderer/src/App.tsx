@@ -3891,6 +3891,18 @@ function ChatScreen({
         }
       }
 
+      const feedbackGradeMatch = feedbackText.trim().match(/^(Good|Partial|Needs work)\b/i)
+      const feedbackGrade = feedbackGradeMatch ? feedbackGradeMatch[1] : null
+      const topic = feedbackSources[0]?.sectionHeader ?? null
+
+      if (window.tokensmith && topic) {
+        try {
+          await window.tokensmith.updateTopicMastery(topic, feedbackGrade)
+        } catch (masteryError) {
+          
+        }
+      }
+
       const feedbackMessage: ChatMessage = {
         id: createId('assistant'),
         role: 'assistant',

@@ -10,13 +10,15 @@ import {
   cancelMaterialIndexingWithPython,
   indexMaterialWithPython,
   listIndexedMaterialsWithPython,
+  listTopicMasteryWithPython,
   previewCleaningWithPython,
   removeMaterialWithPython,
   readTokenSmithLogFile,
   resolveSourceDocumentWithPython,
   searchLibraryWithPython,
   setMaterialEnabledWithPython,
-  starterSourcesWithPython
+  starterSourcesWithPython,
+  updateTopicMasteryWithPython
 } from './python/python-engine-service'
 import {
   removeLocalModelFile
@@ -514,6 +516,10 @@ app.whenReady().then(async () => {
   ipcMain.handle('library:remove-material', (_event, materialId: string, materialPath?: string) =>
     removeMaterialWithPython(materialId, materialPath)
   )
+  ipcMain.handle('quiz:updateMastery', (_event, topic: string, grade:string | null) =>
+    updateTopicMasteryWithPython(topic, grade)
+  )
+  ipcMain.handle('quiz:listMastery', () => listTopicMasteryWithPython())
   ipcMain.handle('ollama:status', () => getOllamaStatus())
   ipcMain.handle('ollama:open-download-page', () => openOllamaDownloadPage())
   ipcMain.handle('ollama:open-app', () => openOllamaApp())

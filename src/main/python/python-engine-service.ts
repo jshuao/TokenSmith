@@ -6,7 +6,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statS
 import { delimiter, dirname, join } from 'node:path'
 import { createInterface } from 'node:readline'
 import type { ChatSource, CourseMaterial, LocalModel, MaterialIndexProgress, SearchMode } from '../../shared/app-state'
-import type { CleaningPreviewResult, QuizAttempt, QuizAttemptInput, TokenSmithLogFile } from '../../shared/engine'
+import type { CleaningPreviewResult, QuizAttempt, QuizAttemptInput, TokenSmithLogFile, TopicMastery } from '../../shared/engine'
 import type { CleaningProfileId, CleaningRuleId } from '../../shared/cleaning'
 
 interface PythonRequest {
@@ -24,6 +24,8 @@ interface PythonRequest {
     | 'preparation_report'
     | 'quiz_record_attempt'
     | 'quiz_export_attempts'
+    | 'quiz_update_mastery'
+    | 'quiz_list_mastery'
   payload: Record<string, unknown>
 }
 
@@ -83,6 +85,15 @@ interface QuizRecordAttemptResult {
 
 interface QuizExportAttemptsResult {
   attempts: QuizAttempt[]
+}
+
+interface QuizUpdateMasteryResult {
+  updated: boolean
+  entry: TopicMastery | null
+}
+
+interface QuizListMasteryResult {
+  entries: TopicMastery[]
 }
 
 let worker: ChildProcessWithoutNullStreams | null = null
@@ -842,4 +853,30 @@ export async function exportQuizAttemptsWithPython(conversationId?: string): Pro
     30_000
   )
   return result.attempts
+}
+
+export async function updateTopicMasteryWithPython(topic: string, grade: string | null): Promise<TopicMastery | null> {
+  const result = await requestPython<QuizUpdateMasteryResult>(
+    'quiz_update_mastery',
+    {
+      topic,
+      grade,
+      userDataPath: app.getPath('userData')
+    },
+    15_000
+  )
+
+  return result.entry
+}
+
+export async function listTopicMasteryWithPython(): Promise<TopicMastery[]> {
+  const result = await requestPython<QuizListMasteryResult>(
+    'quiz_list_mastery',
+    {
+      userDataPath: app.getPath('userData')
+    },
+    15_000
+  )
+
+  return result.entries
 }

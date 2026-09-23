@@ -183,3 +183,13 @@ export interface QuizAttemptInput {
   sourceChunkIds: string[]
   topic: string | null
 }
+
+export interface TopicMastery {
+  topic: string
+  mastery: number
+  confidence: number
+  alpha: number
+  beta: number
+  attempts: number
+  updatedAt: string
+}

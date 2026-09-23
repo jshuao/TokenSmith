@@ -132,6 +132,11 @@ const tokenSmithBridge: TokenSmithBridge = {
   cancelCloudSetup: (requestId) => ipcRenderer.invoke('cloud:cancel', requestId),
   removeModel: (model) =>
     ipcRenderer.invoke('models:remove-model', model) as Promise<Awaited<ReturnType<TokenSmithBridge['removeModel']>>>,
+  updateTopicMastery: (topic, grade) => 
+    ipcRenderer.invoke('quiz:updateMastery', topic, grade) as Promise<Awaited<ReturnType<TokenSmithBridge['updateTopicMastery']>>>,
+  listTopicMastery: () =>
+    ipcRenderer.invoke('quiz:listMastery') as Promise<Awaited<ReturnType<TokenSmithBridge['listTopicMastery']>>>,
+
 }
 
 contextBridge.exposeInMainWorld('tokensmith', tokenSmithBridge)

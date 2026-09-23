@@ -22,6 +22,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 from datetime import datetime
+from tokensmith_store import list_topic_mastery, update_topic_mastery
 
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
@@ -3064,6 +3065,34 @@ def quiz_export_attempts(payload: Dict[str, Any]) -> Dict[str, Any]:
     ]
     return {"attempts": mapped_attempts}
 
+def quiz_update_mastery(payload: Dict[str, Any]) -> Dict[str, Any]:
+    user_data_path = payload["userDataPath"]
+    result = update_topic_mastery(
+        user_data_path,
+        topic=str(payload.get("topic") or ""),
+        grade=payload.get("grade"),
+    )
+
+    if result is None:
+        return {"updated": False, "entry": None}
+    return {
+        "updated": True,
+        "entry": {
+            "topic": result["topic"],
+            "mastery": result["mastery"],
+            "confidence": result["confidence"],
+            "alpha": result["alpha"],
+            "beta": result["beta"],
+            "attempts": result["attempts"],
+            "updatedAt": result["updatedAt"],
+        },
+    }
+
+def quiz_list_mastery(payload: Dict[str, Any]) -> Dict[str, Any]:
+    user_data_path = payload["userDataPath"]
+    entries = list_topic_mastery(user_data_path)
+    return {"entries": entries}
+
 COMMANDS = {
     "health": health,
     "preview_cleaning": preview_cleaning,
@@ -3078,6 +3107,8 @@ COMMANDS = {
     "resolve_source_document": resolve_source_document,
     "quiz_record_attempt": quiz_record_attempt,
     "quiz_export_attempt": quiz_export_attempts,
+    "quiz_update_mastery": quiz_update_mastery,
+    "quiz_list_mastery": quiz_list_mastery,
 }
 
 

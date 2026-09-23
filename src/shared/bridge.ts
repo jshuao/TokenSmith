@@ -22,7 +22,8 @@ import type {
   PdfSourceThumbnail,
   PickMaterialFolderResult,
   PickMaterialsResult,
-  TokenSmithLogFile
+  TokenSmithLogFile,
+  TopicMastery
 } from './engine'
 import type { CleaningProfileId, CleaningRuleId } from './cleaning'
 import type { CloudConnectionInput, CloudConnectionStatus, CloudGeneratorInput, CloudResult } from './cloud-generators'
@@ -86,4 +87,6 @@ export interface TokenSmithBridge {
   connectCloudGenerator: (input: CloudGeneratorInput) => Promise<CloudResult<LocalModel>>
   cancelCloudSetup: (requestId: string) => Promise<void>
   removeModel: (model: LocalModel) => Promise<void>
+  updateTopicMastery: (topic: string, grade:string | null) => Promise<TopicMastery | null>
+  listTopicMastery: () => Promise<TopicMastery[]>
 }
