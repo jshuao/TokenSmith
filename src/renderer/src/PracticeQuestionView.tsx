@@ -1,13 +1,13 @@
 import { useEffect, useRef } from 'react'
 import { ArrowLeft, ArrowRight, BookOpen, Check, Lightbulb, MessageSquare, Pencil } from 'lucide-react'
 import type { ChatSource } from '@shared/app-state'
-import type { PracticeQuestion, PracticeSession } from '@shared/practice'
+import { practiceMasteryLabel, practiceMasteryPercent, practiceTopic, type PracticeQuestion, type PracticeSession, type TopicMastery } from '@shared/practice'
 import { MessageText } from './MessageText'
 import { PracticeFeedbackView } from './PracticeFeedbackView'
 
-export function PracticeQuestionView({ session, question, busy, available, onDraft, onCheck, onHint, onReveal,
+export function PracticeQuestionView({ session, question, mastery, busy, available, onDraft, onCheck, onHint, onReveal,
   onRetry, onCancelRevision, onDiscuss, onNext, onPrevious, onFinish, onOpenSource }: {
-  session: PracticeSession; question: PracticeQuestion; busy: boolean; available: boolean
+  session: PracticeSession; question: PracticeQuestion; mastery?: TopicMastery; busy: boolean; available: boolean
   onDraft: (text: string) => void; onCheck: () => void; onHint: () => void; onReveal: () => void
   onRetry: () => void; onCancelRevision: () => void; onDiscuss: () => void; onNext: () => void; onPrevious: () => void; onFinish: () => void
   onOpenSource: (source: ChatSource, sources: ChatSource[]) => void
@@ -28,7 +28,7 @@ export function PracticeQuestionView({ session, question, busy, available, onDra
       aria-valuenow={session.questions.filter(item => item.attempts.length || item.answerRevealed).length}>
       {Array.from({ length: session.totalQuestions }, (_, index) => <span key={index} className={index === session.currentIndex ? 'is-current' : session.questions[index]?.attempts.length || session.questions[index]?.answerRevealed ? 'is-reviewed' : ''} />)}
     </div>
-    <p className="practice-topic">{question.sources[0]?.sectionHeader || question.sources[0]?.documentTitle || session.title}</p>
+    <p className="practice-topic">{practiceTopic(question) || session.title}{mastery && <span className="practice-topic-mastery"> · {practiceMasteryLabel(mastery)} ({practiceMasteryPercent(mastery)}% mastery)</span>}</p>
     <div className="practice-question"><MessageText text={question.text} /></div>
     {!question.rubric && <p className="practice-muted" role="status">This older question has no saved grading guide. Its answers are preserved; start a new practice for updated feedback.</p>}
     {reviewing ? <section className="practice-submitted-answer" aria-label="Your submitted answer">

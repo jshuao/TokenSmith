@@ -52,6 +52,37 @@ export interface PracticeSession {
   completed: boolean
 }
 
+export interface PracticeAttemptRecord {
+  id: number
+  sessionId: string
+  questionId: string
+  attemptNumber: number
+  question: string
+  studentAnswer: string
+  verdict: string
+  checks: PracticeFeedback['checks']
+  referenceAnswer: string | null
+  sourceKeys: string[]
+  topic: string | null
+  assisted: boolean
+  hintUsed: boolean
+  answerRevealed: boolean
+  durationMs: number | null
+  createdAt: string
+}
+
+export type PracticeAttemptInput = Omit<PracticeAttemptRecord, 'id' | 'createdAt'>
+
+export interface TopicMastery {
+  topic: string
+  mastery: number
+  confidence: number
+  alpha: number
+  beta: number
+  attempts: number
+  updatedAt: string
+}
+
 export interface PracticeState {
   mode: StudyMode
   sessions: PracticeSession[]
@@ -77,6 +108,31 @@ export function practiceSourceKey(source: ChatSource): string {
 
 export function practiceAssisted(question: PracticeQuestion): boolean {
   return Boolean(question.hintUsed || question.answerRevealed || question.attempts.length)
+}
+
+export function practiceTopic(question: Pick<PracticeQuestion, 'sources'>): string {
+  const source = question.sources[0]
+  return (source?.sectionHeader || source?.documentTitle || '').trim()
+}
+
+export const practiceMasteryMinAttempts = 3
+
+export function practiceMasteryLabel(entry: TopicMastery): string {
+  if (entry.attempts < practiceMasteryMinAttempts) return 'Just started'
+  if (entry.mastery >= 0.75) return 'Strong'
+  return entry.mastery >= 0.5 ? 'Developing' : 'Needs practice'
+}
+
+export function practiceMasteryPercent(entry: TopicMastery): number {
+  return Math.round(Math.min(1, Math.max(0, entry.mastery)) * 100)
+}
+
+export function practiceMasteryWeakestFirst(entries: TopicMastery[]): TopicMastery[] {
+  return [...entries].sort((a, b) => a.mastery - b.mastery || a.topic.localeCompare(b.topic))
+}
+
+export function mergeTopicMastery(entries: TopicMastery[], entry: TopicMastery | null): TopicMastery[] {
+  return entry ? [...entries.filter(item => item.topic !== entry.topic), entry] : entries
 }
 
 export const practiceVerdictLabels = { correct: 'Correct', partial: 'Partly there', needs_work: 'Needs another look', needs_review: 'Question needs review' }

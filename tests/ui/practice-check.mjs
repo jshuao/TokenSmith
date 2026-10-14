@@ -47,6 +47,8 @@ try {
   await page.getByRole('button', { name: 'Practice', exact: true }).filter({ visible: true }).click()
   await grade()
   assert.equal(await practice.getByRole('region', { name: 'Your submitted answer' }).isVisible(), true)
+  await practice.locator('.practice-topic-mastery').waitFor()
+  assert.match(await practice.locator('.practice-topic').innerText(), /Ancestor paths · Just started \(50% mastery\)/)
   assert.equal(await practice.getByRole('region', { name: 'Worked explanation' }).count(), 0)
   assert.match(await practice.getByRole('button', { name: 'Revise answer', exact: true }).getAttribute('class'), /is-primary/)
   assert.equal(await practice.getByText('What to explain', { exact: true }).isVisible(), true)
@@ -118,6 +120,8 @@ try {
   await practice.getByRole('heading', { name: 'Your practice recap' }).waitFor()
   assert.equal(await page.evaluate(() => window.practiceTest.state().practice.sessions[0].questions.length), 5)
   assert.equal(await practice.getByText('Revisit this concept', { exact: true }).isVisible(), true)
+  assert.equal(await practice.getByRole('region', { name: 'Topic mastery' }).getByRole('meter').count(), 1)
+  await page.screenshot({ path: `${output}/recap-mastery-desktop.png` })
 
   await open('&error-feedback')
   await start()

@@ -18,6 +18,7 @@ let state = JSON.parse(sessionStorage.getItem(storageKey) || 'null') || {
   settings: { application: { suggestionMode: params.has('suggestions') ? 'on' : 'off', showSources: false }, modelSettingsById: { test: { reasoningMode: 'off', contextLength: 8192, maxLength: 1536 } } }
 }
 const calls = []
+const mastery = new Map()
 let questionCalls = 0
 const sourceFor = (document, index) => ({
   title: document.title, documentTitle: document.title, materialId: document.materialId, documentId: document.documentId,
@@ -51,6 +52,19 @@ window.tokensmith = {
     if (params.has('slow-sources')) await new Promise(resolve => setTimeout(resolve, 2000))
     return [sourceFor(selected[index % selected.length], index)]
   },
+  recordPracticeAttempt: async input => { calls.push({ kind: 'record-attempt', input }); return calls.length },
+  exportPracticeAttempts: async () => calls.filter(call => call.kind === 'record-attempt').map(call => call.input),
+  updateTopicMastery: async (topic, statuses, assisted, revealed) => {
+    calls.push({ kind: 'mastery', topic, statuses, assisted, revealed })
+    if (!topic || (!statuses.length && !revealed)) return null
+    const entry = mastery.get(topic) || { topic, alpha: 1, beta: 1, attempts: 0 }
+    const met = statuses.filter(status => status === 'met').length
+    const next = { ...entry, alpha: entry.alpha + (statuses.length ? met / statuses.length : 0),
+      beta: entry.beta + (statuses.length ? 1 - met / statuses.length : 0.25), attempts: entry.attempts + 1, updatedAt: '2026-10-06' }
+    mastery.set(topic, { ...next, mastery: next.alpha / (next.alpha + next.beta), confidence: next.attempts })
+    return mastery.get(topic)
+  },
+  listTopicMastery: async () => [...mastery.values()],
   resolveChatQuestion: async () => ({ mode: 'contextual', query: 'Explain ancestor paths during insertion.', clarification: '', reasoning: false }),
   sendChatMessage: async request => {
     const kind = request.practiceTask || 'discussion'

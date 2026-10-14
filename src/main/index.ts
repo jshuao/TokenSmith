@@ -1,4 +1,5 @@
 import type { IndexMaterialOptions } from '../shared/preparation'
+import type { PracticeAttemptInput } from '../shared/practice'
 import { preparationReportWithPython } from './python/python-engine-service'
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, net, safeStorage, shell } from 'electron'
 import { createHash } from 'node:crypto'
@@ -13,6 +14,10 @@ import {
   previewCleaningWithPython,
   studyDocumentsWithPython,
   practiceSourcesWithPython,
+  recordPracticeAttemptWithPython,
+  exportPracticeAttemptsWithPython,
+  updateTopicMasteryWithPython,
+  listTopicMasteryWithPython,
   removeMaterialWithPython,
   readTokenSmithLogFile,
   resolveSourceDocumentWithPython,
@@ -529,6 +534,12 @@ app.whenReady().then(async () => {
   ipcMain.handle('library:practice-sources', (_event, documents: StudyDocumentRef[], usedSourceKeys: string[], questionIndex: number) =>
     practiceSourcesWithPython(documents, usedSourceKeys, questionIndex)
   )
+  ipcMain.handle('practice:record-attempt', (_event, input: PracticeAttemptInput) => recordPracticeAttemptWithPython(input))
+  ipcMain.handle('practice:export-attempts', (_event, sessionId?: string) => exportPracticeAttemptsWithPython(sessionId))
+  ipcMain.handle('practice:update-mastery', (_event, topic: string, statuses: string[], assisted: boolean, revealed: boolean) =>
+    updateTopicMasteryWithPython(topic, statuses, assisted, revealed)
+  )
+  ipcMain.handle('practice:list-mastery', () => listTopicMasteryWithPython())
   ipcMain.handle('library:search', (_event, query: string, materials: CourseMaterial[], limit: number, embeddingModels?: LocalModel[], searchMode?: SearchMode, options?: LibrarySearchOptions) =>
     searchLibraryWithPython(query, materials, limit, embeddingModels, searchMode, options)
   )

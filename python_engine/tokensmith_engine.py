@@ -33,6 +33,7 @@ try:
         embedded_chunk_signatures,
         embedding_models_by_collection_ids,
         enabled_material_ids_for_requests,
+        export_practice_attempts,
         fetch_sources,
         expand_source_units,
         find_material_id_by_import_path,
@@ -41,6 +42,8 @@ try:
         keyword_search,
         keyword_terms_for_query,
         list_materials,
+        list_topic_mastery,
+        record_practice_attempt,
         study_documents,
         validate_study_documents,
         practice_source_rows,
@@ -48,6 +51,7 @@ try:
         source_document_for_source,
         starter_source_rows,
         update_material_index_state,
+        update_topic_mastery,
         vector_search,
     )
 except ImportError:  # pragma: no cover - allows direct package imports in tests
@@ -59,6 +63,7 @@ except ImportError:  # pragma: no cover - allows direct package imports in tests
         embedded_chunk_signatures,
         embedding_models_by_collection_ids,
         enabled_material_ids_for_requests,
+        export_practice_attempts,
         fetch_sources,
         expand_source_units,
         find_material_id_by_import_path,
@@ -67,6 +72,8 @@ except ImportError:  # pragma: no cover - allows direct package imports in tests
         keyword_search,
         keyword_terms_for_query,
         list_materials,
+        list_topic_mastery,
+        record_practice_attempt,
         study_documents,
         validate_study_documents,
         practice_source_rows,
@@ -74,6 +81,7 @@ except ImportError:  # pragma: no cover - allows direct package imports in tests
         source_document_for_source,
         starter_source_rows,
         update_material_index_state,
+        update_topic_mastery,
         vector_search,
     )
 
@@ -1951,6 +1959,47 @@ def resolve_source_document(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {"source": source_document_for_source(payload["userDataPath"], source)}
 
 
+
+def practice_record_attempt(payload: Dict[str, Any]) -> Dict[str, Any]:
+    attempt_id = record_practice_attempt(
+        payload["userDataPath"],
+        session_id=str(payload.get("sessionId") or ""),
+        question_id=str(payload.get("questionId") or ""),
+        attempt_number=int(payload.get("attemptNumber") or 1),
+        question=str(payload.get("question") or ""),
+        student_answer=str(payload.get("studentAnswer") or ""),
+        verdict=str(payload.get("verdict") or "unknown"),
+        checks=payload.get("checks") or [],
+        reference_answer=payload.get("referenceAnswer"),
+        source_keys=payload.get("sourceKeys") or [],
+        topic=payload.get("topic"),
+        assisted=bool(payload.get("assisted")),
+        hint_used=bool(payload.get("hintUsed")),
+        answer_revealed=bool(payload.get("answerRevealed")),
+        duration_ms=payload.get("durationMs"),
+    )
+    return {"id": attempt_id}
+
+
+def practice_export_attempts(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return {"attempts": export_practice_attempts(payload["userDataPath"], session_id=payload.get("sessionId"))}
+
+
+def practice_update_mastery(payload: Dict[str, Any]) -> Dict[str, Any]:
+    entry = update_topic_mastery(
+        payload["userDataPath"],
+        str(payload.get("topic") or ""),
+        payload.get("statuses") or [],
+        assisted=bool(payload.get("assisted")),
+        revealed=bool(payload.get("revealed")),
+    )
+    return {"entry": entry}
+
+
+def practice_list_mastery(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return {"entries": list_topic_mastery(payload["userDataPath"])}
+
+
 COMMANDS = {
     "health": health,
     "preview_cleaning": preview_cleaning,
@@ -1960,6 +2009,10 @@ COMMANDS = {
     "starter_sources": starter_sources,
     "study_documents": list_study_documents,
     "practice_sources": practice_sources,
+    "practice_record_attempt": practice_record_attempt,
+    "practice_export_attempts": practice_export_attempts,
+    "practice_update_mastery": practice_update_mastery,
+    "practice_list_mastery": practice_list_mastery,
     "list_materials": list_indexed_materials,
     "set_material_enabled": set_material_enabled,
     "remove_material": remove_material,

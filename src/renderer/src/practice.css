@@ -83,6 +83,12 @@
 .practice-past-attempt { padding-top: 16px; }
 .practice-recap-question { padding: 16px 0; border-bottom: 1px solid var(--border-subtle, var(--line)); }
 .practice-recap-question summary { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.practice-mastery { margin-top: 28px; }
+.practice-mastery ul { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.practice-mastery li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; align-items: baseline; }
+.practice-mastery-topic { min-width: 0; overflow-wrap: anywhere; }
+.practice-mastery-bar { grid-column: 1 / -1; height: 4px; border-radius: 2px; overflow: hidden; background: var(--surface-selected, var(--green-soft)); }
+.practice-mastery-bar span { display: block; height: 100%; border-radius: 2px; background: #488265; }
 .practice-pending { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 20px; color: var(--content-muted, var(--muted)); }
 .practice-pending button { margin-left: auto; }
 .practice-error { color: var(--danger); padding: 12px 0; overflow-wrap: anywhere; }

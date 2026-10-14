@@ -22,8 +22,12 @@ except Exception:  # pragma: no cover - optional until app runtime is installed
 
 DB_NAME = "tokensmith.sqlite"
 FAISS_NAME = "tokensmith.faiss"
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 ALIAS_EXTRACTION_VERSION = 1
+PRACTICE_EVIDENCE_PER_QUESTION = 1.0
+PRACTICE_MISSING_WEIGHT = 0.5
+PRACTICE_ASSISTED_CREDIT = 0.5
+PRACTICE_REVEAL_PENALTY = 0.25
 KEYWORD_STOPWORDS: Set[str] = {
     "a",
     "about",
@@ -401,12 +405,41 @@ def create_schema(conn: sqlite3.Connection) -> None:
             error TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS practice_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            question_id TEXT NOT NULL,
+            attempt_number INTEGER NOT NULL,
+            question TEXT NOT NULL,
+            student_answer TEXT NOT NULL,
+            verdict TEXT NOT NULL,
+            checks_json TEXT NOT NULL,
+            reference_answer TEXT,
+            source_keys_json TEXT NOT NULL,
+            topic TEXT,
+            assisted INTEGER NOT NULL DEFAULT 0,
+            hint_used INTEGER NOT NULL DEFAULT 0,
+            answer_revealed INTEGER NOT NULL DEFAULT 0,
+            duration_ms INTEGER,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS topic_mastery (
+            topic TEXT PRIMARY KEY,
+            alpha REAL NOT NULL DEFAULT 1.0,
+            beta REAL NOT NULL DEFAULT 1.0,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL
+        );
+
         CREATE INDEX IF NOT EXISTS idx_collection_items_collection_id ON collection_items(collection_id);
         CREATE INDEX IF NOT EXISTS idx_collection_items_folder_id ON collection_items(folder_id);
         CREATE INDEX IF NOT EXISTS idx_documents_folder_id ON documents(folder_id);
         CREATE INDEX IF NOT EXISTS idx_embeddings_model ON embeddings(model);
         CREATE INDEX IF NOT EXISTS idx_embeddings_chunk_id ON embeddings(chunk_id);
         CREATE INDEX IF NOT EXISTS idx_pdf_page_thumbnails_document_id ON pdf_page_thumbnails(document_id);
+        CREATE INDEX IF NOT EXISTS idx_practice_attempts_session_id ON practice_attempts(session_id);
+        CREATE INDEX IF NOT EXISTS idx_practice_attempts_topic ON practice_attempts(topic);
         """
     )
     create_fts_schema(conn)
@@ -2511,3 +2544,169 @@ def dump_index(user_data_path: str) -> Dict[str, Any]:
         chunks.append(chunk)
 
     return {"version": SCHEMA_VERSION, "documents": documents, "chunks": chunks, "updatedAt": now_iso()}
+
+
+def record_practice_attempt(
+    user_data_path: str,
+    session_id: str,
+    question_id: str,
+    attempt_number: int,
+    question: str,
+    student_answer: str,
+    verdict: str,
+    checks: Sequence[Any],
+    reference_answer: Optional[str],
+    source_keys: Sequence[str],
+    topic: Optional[str],
+    assisted: bool,
+    hint_used: bool,
+    answer_revealed: bool,
+    duration_ms: Optional[int],
+) -> int:
+    init_db(user_data_path)
+
+    with connect(user_data_path) as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO practice_attempts(
+                session_id,
+                question_id,
+                attempt_number,
+                question,
+                student_answer,
+                verdict,
+                checks_json,
+                reference_answer,
+                source_keys_json,
+                topic,
+                assisted,
+                hint_used,
+                answer_revealed,
+                duration_ms,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                session_id,
+                question_id,
+                attempt_number,
+                question,
+                student_answer,
+                verdict,
+                json.dumps(list(checks)),
+                reference_answer,
+                json.dumps(list(source_keys)),
+                topic,
+                1 if assisted else 0,
+                1 if hint_used else 0,
+                1 if answer_revealed else 0,
+                duration_ms,
+                now_iso(),
+            ),
+        )
+        return int(cursor.lastrowid)
+
+
+def export_practice_attempts(user_data_path: str, session_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    init_db(user_data_path)
+
+    with connect(user_data_path) as conn:
+        if session_id is None:
+            rows = conn.execute("SELECT * FROM practice_attempts ORDER BY id").fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM practice_attempts WHERE session_id = ? ORDER BY id",
+                (session_id,),
+            ).fetchall()
+
+    return [
+        {
+            "id": row["id"],
+            "sessionId": row["session_id"],
+            "questionId": row["question_id"],
+            "attemptNumber": row["attempt_number"],
+            "question": row["question"],
+            "studentAnswer": row["student_answer"],
+            "verdict": row["verdict"],
+            "checks": json.loads(row["checks_json"]),
+            "referenceAnswer": row["reference_answer"],
+            "sourceKeys": json.loads(row["source_keys_json"]),
+            "topic": row["topic"],
+            "assisted": bool(row["assisted"]),
+            "hintUsed": bool(row["hint_used"]),
+            "answerRevealed": bool(row["answer_revealed"]),
+            "durationMs": row["duration_ms"],
+            "createdAt": row["created_at"],
+        }
+        for row in rows
+    ]
+
+
+def _mastery_entry(row: sqlite3.Row) -> Dict[str, Any]:
+    alpha = float(row["alpha"])
+    beta = float(row["beta"])
+    return {
+        "topic": row["topic"],
+        "mastery": alpha / (alpha + beta),
+        "confidence": row["attempts"],
+        "alpha": alpha,
+        "beta": beta,
+        "attempts": row["attempts"],
+        "updatedAt": row["updated_at"],
+    }
+
+
+def update_topic_mastery(
+    user_data_path: str,
+    topic: str,
+    statuses: Sequence[str],
+    assisted: bool = False,
+    revealed: bool = False,
+) -> Optional[Dict[str, Any]]:
+    init_db(user_data_path)
+    topic = (topic or "").strip()
+    if not topic:
+        return None
+    if not statuses and not revealed:
+        return None
+
+    alpha_delta = 0.0
+    beta_delta = 0.0
+    if statuses:
+        per = PRACTICE_EVIDENCE_PER_QUESTION / len(statuses)
+        for status in statuses:
+            if status == "met":
+                alpha_delta += per * PRACTICE_ASSISTED_CREDIT if assisted else per
+            elif status == "incorrect":
+                beta_delta += per
+            elif status == "missing":
+                beta_delta += per * PRACTICE_MISSING_WEIGHT
+    else:
+        beta_delta += PRACTICE_REVEAL_PENALTY
+
+    with connect(user_data_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO topic_mastery(topic, alpha, beta, attempts, updated_at)
+            VALUES (?, 1.0 + ?, 1.0 + ?, 1, ?)
+            ON CONFLICT(topic) DO UPDATE SET
+                alpha = alpha + ?,
+                beta = beta + ?,
+                attempts = attempts + 1,
+                updated_at = excluded.updated_at
+            """,
+            (topic, alpha_delta, beta_delta, now_iso(), alpha_delta, beta_delta),
+        )
+        row = conn.execute("SELECT * FROM topic_mastery WHERE topic = ?", (topic,)).fetchone()
+
+    return _mastery_entry(row)
+
+
+def list_topic_mastery(user_data_path: str) -> List[Dict[str, Any]]:
+    init_db(user_data_path)
+
+    with connect(user_data_path) as conn:
+        rows = conn.execute("SELECT * FROM topic_mastery ORDER BY topic").fetchall()
+
+    return [_mastery_entry(row) for row in rows]

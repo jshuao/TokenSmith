@@ -11,6 +11,7 @@ import { createInterface } from 'node:readline'
 import type { ChatSource, CourseMaterial, LocalModel, MaterialIndexProgress, SearchMode } from '../../shared/app-state'
 import type { CleaningPreviewResult, TokenSmithLogFile } from '../../shared/engine'
 import type { CleaningProfileId, CleaningRuleId } from '../../shared/cleaning'
+import type { PracticeAttemptInput, PracticeAttemptRecord, TopicMastery } from '../../shared/practice'
 
 interface PythonRequest {
   id: string
@@ -21,6 +22,10 @@ interface PythonRequest {
     | 'starter_sources'
     | 'study_documents'
     | 'practice_sources'
+    | 'practice_record_attempt'
+    | 'practice_export_attempts'
+    | 'practice_update_mastery'
+    | 'practice_list_mastery'
     | 'list_materials'
     | 'set_material_enabled'
     | 'remove_material'
@@ -784,6 +789,34 @@ export async function practiceSourcesWithPython(documents: StudyDocumentRef[], u
     userDataPath: app.getPath('userData'), documents, usedSourceKeys, questionIndex
   }, 30_000)
   return result.sources
+}
+
+export async function recordPracticeAttemptWithPython(input: PracticeAttemptInput): Promise<number> {
+  const result = await requestPython<{ id: number }>('practice_record_attempt', {
+    userDataPath: app.getPath('userData'), ...input
+  }, 30_000)
+  return result.id
+}
+
+export async function exportPracticeAttemptsWithPython(sessionId?: string): Promise<PracticeAttemptRecord[]> {
+  const result = await requestPython<{ attempts: PracticeAttemptRecord[] }>('practice_export_attempts', {
+    userDataPath: app.getPath('userData'), sessionId
+  }, 30_000)
+  return result.attempts
+}
+
+export async function updateTopicMasteryWithPython(topic: string, statuses: string[], assisted: boolean, revealed: boolean): Promise<TopicMastery | null> {
+  const result = await requestPython<{ entry: TopicMastery | null }>('practice_update_mastery', {
+    userDataPath: app.getPath('userData'), topic, statuses, assisted, revealed
+  }, 30_000)
+  return result.entry
+}
+
+export async function listTopicMasteryWithPython(): Promise<TopicMastery[]> {
+  const result = await requestPython<{ entries: TopicMastery[] }>('practice_list_mastery', {
+    userDataPath: app.getPath('userData')
+  }, 30_000)
+  return result.entries
 }
 
 export async function setMaterialEnabledWithPython(materialId: string, isActive: boolean): Promise<void> {
