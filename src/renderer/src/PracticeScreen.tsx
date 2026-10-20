@@ -61,6 +61,11 @@ export function PracticeScreen(props: Props) {
   const noteMastery = (entry: TopicMastery | null) => setMastery(current => mergeTopicMastery(current, entry))
   const model = session ? models.find(item => item.id === session.modelId) : props.selectedModel
   const available = model?.status === 'ready'
+  const warmSettings = model && (session?.modelSettings ?? props.modelSettingsFor(model.id))
+  useEffect(() => {
+    if (!isActive || !model || !available || !warmSettings) return
+    void Promise.resolve().then(() => window.tokensmith?.warmModel(model, warmSettings)).catch(() => {})
+  }, [isActive, model?.id, available, warmSettings?.contextLength])
   const scope = session ? scopeRefs(session.documents) : state.draftScope ?? props.inheritScope
   const selected = scope.map(studyDocumentKey)
   const setScope = (draftScope: StudyDocumentRef[]) => onChange(current => ({ ...current, draftScope }))

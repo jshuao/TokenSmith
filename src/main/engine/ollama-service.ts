@@ -101,6 +101,7 @@ interface ActiveOllamaPull {
 }
 
 const activeOllamaPulls = new Map<string, ActiveOllamaPull>()
+const ollamaKeepAlive = '30m'
 
 function normalizeOllamaBaseUrl(baseUrl = defaultOllamaBaseUrl): string {
   let normalized = baseUrl.trim().replace(/\/+$/, '')
@@ -865,6 +866,7 @@ async function requestOllamaChatCompletion(
         ...(overrides.temperature !== undefined ? { temperature: overrides.temperature } : {})
       },
       ...(overrides.format ? { format: overrides.format } : {}),
+      keep_alive: ollamaKeepAlive,
       stream: false,
       think: overrides.thinking ?? false
     }),
@@ -876,6 +878,25 @@ async function requestOllamaChatCompletion(
   }
 
   return (await response.json()) as OllamaChatResponse
+}
+
+export async function warmOllamaModel(model: LocalModel, modelSettings?: ModelRuntimeSettings): Promise<void> {
+  assertOllamaModel(model)
+  const baseUrl = model.ollamaBaseUrl || defaultOllamaBaseUrl
+  const runtime = await requestWithOllamaRuntimeContext({ model, modelSettings }, baseUrl, model.ollamaModelName)
+  const response = await fetchWithTimeout(`${ollamaApiBaseUrl(baseUrl)}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      model: model.ollamaModelName,
+      messages: [],
+      keep_alive: ollamaKeepAlive,
+      ...(runtime.modelSettings ? { options: { num_ctx: runtime.modelSettings.contextLength } } : {})
+    })
+  }, 180_000)
+  if (!response.ok) {
+    throw new Error(`Ollama could not load the model: HTTP ${response.status}${await responseErrorDetail(response)}.`)
+  }
 }
 
 async function runOllamaChatCompletion(

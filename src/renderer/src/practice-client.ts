@@ -4,6 +4,8 @@ import type { PracticeQuestion, PracticeSession } from '@shared/practice'
 import { practiceSourceKey } from '../../shared/practice'
 import { parsePracticeFeedback, parsePracticeQuestion, quizFeedbackPrompt, quizQuestionPrompt, type PracticeTask } from '../../shared/quiz'
 
+const practiceQuestionAttempts = 2
+
 export function createPracticeClient(bridge: TokenSmithBridge, model: LocalModel, settings: TokenSmithSettings) {
   async function send(session: PracticeSession, requestId: string, practiceTask: PracticeTask, prompt: string, sources: ChatSource[]) {
     if (model.id !== session.modelId || model.status !== 'ready') throw new Error('The model used for this session is unavailable. Reconnect it before continuing.')
@@ -21,12 +23,20 @@ export function createPracticeClient(bridge: TokenSmithBridge, model: LocalModel
         session.questions.flatMap(question => question.sources.map(practiceSourceKey)), session.questions.length)
       signal.throwIfAborted()
       if (!sources.length) throw new Error('No unused passages remain in these documents. Finish this session or start with more documents.')
-      const reply = await send(session, requestId, 'question', quizQuestionPrompt({ questionNumber: session.questions.length + 1,
-        totalQuestions: session.totalQuestions, previousQuestions: session.questions.map(question => question.text) }), sources)
-      signal.throwIfAborted()
-      const prepared = parsePracticeQuestion(reply.text, reply.sources)
-      return { id: crypto.randomUUID(), ...prepared,
-        draft: '', attempts: [], reviewing: false }
+      const prompt = quizQuestionPrompt({ questionNumber: session.questions.length + 1,
+        totalQuestions: session.totalQuestions, previousQuestions: session.questions.map(question => question.text) })
+      for (let attempt = 1; ; attempt++) {
+        const reply = await send(session, requestId, 'question', prompt, sources)
+        signal.throwIfAborted()
+        try {
+          const prepared = parsePracticeQuestion(reply.text, reply.sources)
+          return { id: crypto.randomUUID(), ...prepared, draft: '', attempts: [], reviewing: false }
+        } catch (error) {
+          const reason = error instanceof Error ? String(error.cause ?? error.message) : String(error)
+          void Promise.resolve(bridge.logPracticeQuestionRejected?.({ attempt, reason, response: reply.text })).catch(() => {})
+          if (attempt >= practiceQuestionAttempts) throw error
+        }
+      }
     },
     async feedback(session: PracticeSession, question: PracticeQuestion, answer: string, requestId: string) {
       if (!question.rubric || !question.referenceAnswer) throw new Error('This older question has no saved grading guide. Start a new practice for updated feedback.')

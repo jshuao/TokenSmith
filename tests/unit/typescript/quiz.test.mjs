@@ -31,8 +31,8 @@ test('question packages require evidence in the actual packed sources, not model
   assert.equal(question.text, packageData.question)
   assert.equal(question.referenceAnswer, packageData.explanation)
   for (const mutate of [
-    p => p.criteria[0].evidence[0].sourceKey = 'another-document',
     p => p.criteria[0].evidence[0].quote = 'A quotation that is not present.',
+    p => { p.criteria[0].evidence[0].sourceKey = 'another-document'; p.criteria[0].evidence[0].quote = 'A quotation that is not present.' },
     p => p.criteria[0].evidence = [],
     p => p.criteria[1].id = 'c1',
     p => p.criteria = [],
@@ -46,6 +46,34 @@ test('question packages require evidence in the actual packed sources, not model
   const short = { ...source, excerpt: 'The relationship is F = ma.' }
   assert.doesNotThrow(() => parsePracticeQuestion(JSON.stringify({ ...packageData,
     criteria: [{ ...packageData.criteria[0], evidence: [{ sourceKey: 'c:1:1', quote: 'F = ma' }] }] }), [short]))
+})
+
+test('question evidence quoted from a different supplied passage is credited to that passage', () => {
+  const other = { materialId: 'c', documentId: 1, chunkId: '2', excerpt: 'Buffer pools cache disk pages in memory.' }
+  const changed = structuredClone(packageData)
+  changed.criteria[1].evidence[0] = { sourceKey: 'c:1:1', quote: 'Buffer pools cache disk pages in memory.' }
+  const parsed = parsePracticeQuestion(JSON.stringify(changed), [source, other])
+  assert.equal(parsed.rubric.criteria[1].evidence[0].sourceKey, 'c:1:2')
+  assert.deepEqual(parsed.sources, [source, other])
+  changed.criteria[1].evidence[0].sourceKey = 'invented-key'
+  assert.equal(parsePracticeQuestion(JSON.stringify(changed), [source, other]).rubric.criteria[1].evidence[0].sourceKey, 'c:1:2')
+})
+
+test('question evidence ignores stray spaces that PDF extraction leaves around punctuation', () => {
+  const pdf = { ...source, excerpt: 'Let V2 and V3 denote the version vectors at N2 and N3 . Then V2 [2] = 2 ( for N2 ) .' }
+  const changed = structuredClone(packageData)
+  changed.criteria = [{ ...packageData.criteria[0], evidence: [{ sourceKey: 'c:1:1', quote: 'Let V2 and V3 denote the version vectors at N2 and N3.' }] },
+    { ...packageData.criteria[1], evidence: [{ sourceKey: 'c:1:1', quote: 'Then V2 [2] = 2 (for N2).' }] }]
+  assert.doesNotThrow(() => parsePracticeQuestion(JSON.stringify(changed), [pdf]))
+  changed.criteria[1].evidence[0].quote = 'Then V2[2] = 2'
+  assert.throws(() => parsePracticeQuestion(JSON.stringify(changed), [pdf]), /valid question/)
+})
+
+test('rejected question packages keep the specific reason for logging', () => {
+  const changed = structuredClone(packageData)
+  changed.criteria[0].evidence[0].quote = 'A quotation that is not present.'
+  assert.throws(() => parsePracticeQuestion(JSON.stringify(changed), [source]),
+    error => /valid question/.test(error.message) && /c1 was not found.*A quotation that is not present/.test(error.cause))
 })
 
 test('feedback preserves the submitted answer as data and includes the actual previous attempt', () => {

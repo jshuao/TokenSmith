@@ -65,6 +65,8 @@ window.tokensmith = {
     return mastery.get(topic)
   },
   listTopicMastery: async () => [...mastery.values()],
+  logPracticeQuestionRejected: async detail => { calls.push({ kind: 'question-rejected', detail }) },
+  warmModel: async (model, settings) => { calls.push({ kind: 'warm', modelId: model.id, contextLength: settings.contextLength }) },
   resolveChatQuestion: async () => ({ mode: 'contextual', query: 'Explain ancestor paths during insertion.', clarification: '', reasoning: false }),
   sendChatMessage: async request => {
     const kind = request.practiceTask || 'discussion'

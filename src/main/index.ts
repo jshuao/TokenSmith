@@ -1,6 +1,6 @@
 import type { IndexMaterialOptions } from '../shared/preparation'
 import type { PracticeAttemptInput } from '../shared/practice'
-import { preparationReportWithPython } from './python/python-engine-service'
+import { preparationReportWithPython, writeTokenSmithLog } from './python/python-engine-service'
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, net, safeStorage, shell } from 'electron'
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, statSync } from 'node:fs'
@@ -36,7 +36,8 @@ import {
   openOllamaApp,
   openOllamaDownloadPage,
   pullOllamaModel,
-  startOllamaService
+  startOllamaService,
+  warmOllamaModel
 } from './engine/ollama-service'
 import { searchOllamaLibrary } from './engine/ollama-library-search'
 import { detectDeviceCapabilities } from './system/detect-device-capabilities'
@@ -46,7 +47,7 @@ import {
   modelWithRememberedRemoteApiKey,
   sanitizeAppStateSecrets
 } from './engine/remote-model-secrets'
-import type { AppStateSnapshot, ChatSource, CourseMaterial, LocalModel, LocalModelRole, SearchMode } from '../shared/app-state'
+import type { AppStateSnapshot, ChatSource, CourseMaterial, LocalModel, LocalModelRole, ModelRuntimeSettings, SearchMode } from '../shared/app-state'
 import type { StudyDocumentRef, LibrarySearchOptions } from '../shared/study-scope'
 import { removeRetiredModelState } from '../shared/retired-model-state'
 import type { CleaningProfileId, CleaningRuleId } from '../shared/cleaning'
@@ -540,6 +541,12 @@ app.whenReady().then(async () => {
     updateTopicMasteryWithPython(topic, statuses, assisted, revealed)
   )
   ipcMain.handle('practice:list-mastery', () => listTopicMasteryWithPython())
+  ipcMain.handle('practice:log-question-rejected', (_event, detail: { attempt: number; reason: string; response: string }) =>
+    writeTokenSmithLog('practice_question_validation_failed', detail)
+  )
+  ipcMain.handle('engine:warm-model', (_event, model: LocalModel, modelSettings: ModelRuntimeSettings) =>
+    model.engine === 'ollama' ? warmOllamaModel(model, modelSettings) : undefined
+  )
   ipcMain.handle('library:search', (_event, query: string, materials: CourseMaterial[], limit: number, embeddingModels?: LocalModel[], searchMode?: SearchMode, options?: LibrarySearchOptions) =>
     searchLibraryWithPython(query, materials, limit, embeddingModels, searchMode, options)
   )

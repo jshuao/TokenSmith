@@ -117,12 +117,41 @@ test('invalid model output fails explicitly; older questions never get invented 
   const empty = harness({ practiceSources: async () => [] })
   await assert.rejects(empty.client.question(session, 'r', new AbortController().signal), /No unused passages/)
   for (const reply of [{ text: '', sources: [source] }, { text: 'Question?', sources: [] }]) {
-    const { client } = harness({ sendChatMessage: async () => reply })
+    const sent = []
+    const { client } = harness({ sendChatMessage: async request => { sent.push(request.practiceTask); return reply } })
     await assert.rejects(client.question(session, 'r', new AbortController().signal), /valid question/)
+    assert.deepEqual(sent, ['question', 'question'])
     await assert.rejects(client.feedback(session, question, 'answer', 'r'), /usable feedback/)
   }
   const { client, calls } = harness()
   await assert.rejects(client.feedback(session, { ...question, rubric: undefined }, 'answer', 'r'), /older question/)
   await assert.rejects(client.feedback({ ...session, modelId: 'other' }, question, 'answer', 'r'), /unavailable/)
   assert.equal(calls.length, 0)
+})
+
+test('a rejected question is logged and regenerated once from the same passages', async () => {
+  const rejected = []
+  let replies = 0
+  const { client, calls } = harness({
+    sendChatMessage: async request => { calls.push(['model', request]); replies++
+      return { text: replies === 1 ? '{"question": "Unsupported?"}' : JSON.stringify(packageData), sources: [source] } },
+    logPracticeQuestionRejected: async detail => { rejected.push(detail) }
+  })
+  const generated = await client.question(session, 'r', new AbortController().signal)
+  assert.equal(generated.text, packageData.question)
+  assert.equal(calls.filter(call => call[0] === 'sources').length, 1)
+  const prompts = calls.filter(call => call[0] === 'model').map(call => [call[1].prompt, call[1].retrievedSources])
+  assert.equal(prompts.length, 2)
+  assert.deepEqual(prompts[0], prompts[1])
+  assert.equal(rejected.length, 1)
+  assert.equal(rejected[0].attempt, 1)
+  assert.equal(rejected[0].response, '{"question": "Unsupported?"}')
+  assert.ok(rejected[0].reason)
+})
+
+test('a cancelled question is not regenerated after a rejected reply', async () => {
+  const controller = new AbortController()
+  const { client, calls } = harness({ sendChatMessage: async request => { calls.push(['model', request]); controller.abort(); return { text: 'Question?', sources: [source] } } })
+  await assert.rejects(client.question(session, 'r', controller.signal))
+  assert.equal(calls.filter(call => call[0] === 'model').length, 1)
 })

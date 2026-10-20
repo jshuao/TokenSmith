@@ -83,7 +83,7 @@ function array(value: unknown, min: number, max: number): unknown[] {
   if (!Array.isArray(value) || value.length < min || value.length > max) throw new Error('Invalid list length.')
   return value
 }
-const normalizedQuote = (value: string) => value.replace(/\s+/g, ' ').trim()
+const normalizedQuote = (value: string) => value.replace(/\s+/g, ' ').replace(/ ([.,;:!?)\]])/g, '$1').replace(/([(\[]) /g, '$1').trim()
 
 export function parsePracticeQuestion(raw: string, sources: ChatSource[]): {
   text: string; rubric: PracticeRubric; referenceAnswer: string; hint: string; sources: ChatSource[]
@@ -95,11 +95,12 @@ export function parsePracticeQuestion(raw: string, sources: ChatSource[]): {
       const criterion = record(item)
       const evidence = array(criterion.evidence, 1, 2).map(item => {
         const citation = record(item)
-        const sourceKey = text(citation.sourceKey), quote = text(citation.quote)
-        const source = sources.find(source => practiceSourceKey(source) === sourceKey)
-        if (!source || !normalizedQuote(source.context || source.excerpt).includes(normalizedQuote(quote))) {
-          throw new Error('The cited evidence was not present in the supplied passages.')
-        }
+        const citedKey = text(citation.sourceKey), quote = text(citation.quote)
+        const contains = (source: ChatSource) => normalizedQuote(source.context || source.excerpt).includes(normalizedQuote(quote))
+        const citedSource = sources.find(source => practiceSourceKey(source) === citedKey)
+        const source = citedSource && contains(citedSource) ? citedSource : sources.find(contains)
+        if (!source) throw new Error(`Evidence for ${text(criterion.id, false) || 'a criterion'} was not found in the supplied passages: ${quote.slice(0, 160)}`)
+        const sourceKey = practiceSourceKey(source)
         cited.add(sourceKey)
         return { sourceKey, quote }
       })
@@ -110,8 +111,9 @@ export function parsePracticeQuestion(raw: string, sources: ChatSource[]): {
       assumptions: array(value.assumptions, 0, 3).map(item => text(item)) },
       referenceAnswer: text(value.explanation), hint: text(value.hint),
       sources: sources.filter(source => cited.has(practiceSourceKey(source))) }
-  } catch {
-    throw new Error('The model did not return a valid question with verifiable supporting passages. Try preparing the question again.')
+  } catch (error) {
+    throw new Error('The model did not return a valid question with verifiable supporting passages. Try preparing the question again.',
+      { cause: error instanceof Error ? error.message : String(error) })
   }
 }
 
